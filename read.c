@@ -14,14 +14,8 @@ A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "makeint.h"
 
-#include <assert.h>
-
-#include <glob.h>
-
-#include "filedef.h"
-#include "dep.h"
+#include "depcache.h"
 #include "job.h"
 #include "commands.h"
 #include "variable.h"
@@ -860,7 +854,7 @@ eval (struct ebuffer *ebuf, int set_default)
         }
 
       /* Handle include and variants.  */
-      if (word1eq ("include") || word1eq ("-include") || word1eq ("sinclude"))
+      if (word1eq ("include") || word1eq ("-include") || word1eq ("sinclude") || word1eq("includedepcache") || word1eq("-includedepcache"))
         {
           /* We have found an 'include' line specifying a nested
              makefile to be read at this point.  */
@@ -870,6 +864,7 @@ eval (struct ebuffer *ebuf, int set_default)
           /* "-include" (vs "include") says no error if the file does not
              exist.  "sinclude" is an alias for this from SGI.  */
           int noerror = (p[0] != 'i');
+          int asdepcache = (p[7] == 'd') || (p[0] == '-' && p[8] == 'd');
 
           /* Include ends the previous rule.  */
           record_waiting_files ();
@@ -903,16 +898,26 @@ eval (struct ebuffer *ebuf, int set_default)
               struct nameseq *next = files->next;
               const char *name = files->name;
               int r;
+              int foundcache = 0;
 
               free_ns (files);
               files = next;
 
-              r = eval_makefile (name,
+              if(asdepcache)
+                foundcache = read_depcache(name);
+              if(!foundcache)
+              {
+                if(asdepcache)
+                  start_depcache();
+                r = eval_makefile (name,
                                  (RM_INCLUDED | RM_NO_TILDE
                                   | (noerror ? RM_DONTCARE : 0)
                                   | (set_default ? 0 : RM_NO_DEFAULT_GOAL)));
-              if (!r && !noerror)
-                error (fstart, "%s: %s", name, strerror (errno));
+                if (!r && !noerror)
+                  error (fstart, "%s: %s", name, strerror (errno));
+                if(asdepcache)
+                  end_depcache(name);
+              }
             }
 
           /* Restore conditional state.  */
@@ -2176,6 +2181,7 @@ record_files (struct nameseq *filenames, const char *pattern,
                 this->stem = f->stem;
             }
         }
+      add_depcache(f, deps);
 
       /* Add the dependencies to this file entry.  */
       if (this != 0)

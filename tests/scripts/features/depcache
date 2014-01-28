@@ -1,0 +1,66 @@
+#                                     -*-mode: perl; rm-trailing-spaces: nil-*-
+
+$description = "Test the dependency cache of the GNU make.";
+
+$details = "\
+Test includedepcache command to generate valid cachefile and update them as needed.\
+";
+
+$makefile2 = &get_tmpfile;
+
+open(MAKEFILE,"> $makefile");
+
+print MAKEFILE <<EOF;
+target-%: ; \@echo \$@
+all: ; \@true
+
+includedepcache $makefile2
+EOF
+
+close(MAKEFILE);
+
+open(MAKEFILE,"> $makefile2");
+print MAKEFILE <<EOF;
+all: target-c
+target-c: target-b
+target-b: target-a
+EOF
+close(MAKEFILE);
+
+#initial run to create cache
+&run_make_with_options($makefile, "all", &get_logfile);
+$answer = "target-a\ntarget-b\ntarget-c\n";
+&compare_output($answer, &get_logfile(1));
+
+#rerun (should use cache)
+&run_make_with_options($makefile, "all", &get_logfile);
+$answer = "target-a\ntarget-b\ntarget-c\n";
+&compare_output($answer, &get_logfile(1));
+
+# corrupt cache
+$cachefile = $makefile2 . ".cache";
+
+open(CACHEFILE,"> $cachefile");
+print CACHEFILE <<EOF;
+garbage
+EOF
+close(CACHEFILE);
+
+#rerun (should still use cache, as cache is younger and thus fail)
+&run_make_with_options($makefile, "all", &get_logfile, 512);
+$answer = "make: *** corrupt cache file\n.  Stop.\n";
+&compare_output($answer, &get_logfile(1));
+
+sleep(1);
+open(MAKEFILE,"> $makefile2");
+print MAKEFILE <<EOF;
+all: target-f
+target-f: target-e
+target-e: target-d
+EOF
+close(MAKEFILE);
+
+#rerun (should still try to recache, as cache is older)
+&run_make_with_options($makefile, "all", &get_logfile);
+$answer = "target-d\ntarget-e\ntarget-f\n";
+&compare_output($answer, &get_logfile(1));
