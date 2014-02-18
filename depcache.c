@@ -286,7 +286,10 @@ read_depcache (const char *cachedfilename)
   cachefilename = get_cachefilename (cachedfilename);
   EINTRLOOP (e, stat (cachefilename, &st_cache));
   if (e)
+  {
+    free (cachefilename);
     return 0;
+  }
   cachefiletime = FILE_TIMESTAMP_STAT_MODTIME (cachefilename, st_cache);
   cachefile = fopen (cachefilename, "r");
   free (cachefilename);
