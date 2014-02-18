@@ -161,6 +161,8 @@ end_depcache (const char *cachedfilename)
   cachefilename = get_cachefilename (cachedfilename);
   cachefile = fopen (cachefilename, "w");
   free (cachefilename);
+  if(!cachefile)
+    return;
   fprintf (cachefile, "%d\n", writecache_count);
   // reorder the ids as we write them
   target_order = xmalloc (sizeof (char *) * writecache_count);
